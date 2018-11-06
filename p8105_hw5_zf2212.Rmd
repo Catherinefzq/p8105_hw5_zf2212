@@ -27,7 +27,7 @@ Start with a dataframe containing all file names; the list.files function will h
 Iterate over file names and read in data for each subject using purrr::map and saving the result as a new variable in the dataframe
 Tidy the result; manipulate file names to include control arm and subject ID, make sure weekly observations are “tidy”, and do any other tidying that’s necessary
 
-```{r data import}
+```{r study data import}
 # creat file names list with path
 file_list = tibble(
   file_name = list.files(path = "./data")) %>% 
@@ -51,18 +51,43 @@ __Description__
 
 Make a spaghetti plot showing observations on each subject over time, and comment on differences between groups.
 
-```{r spaghetti plot}
+```{r spaghetti plot, fig.width = 9}
+# prepare the data
 data_plot = data_tidy %>% 
-  gather(key = "week", value = "number", week_1:week_8)
+  gather(key = "week", value = "observation", week_1:week_8) %>% # gather the data for plot
+  mutate(week, week = as.numeric(str_replace(week, "week_",""))) # convert week into number
+# make the plot
+data_plot %>% 
+  ggplot(aes(x = week, y = observation, color = id)) +
+  geom_point(alpha = .6, size = .8) +
+  geom_line(alpha = .6) +
+  facet_grid(~arm) + 
+  scale_x_discrete(limits = c(1:8)) + # break in 8 weeks
+  labs(title = "Spaghetti Plot of Control and Experimental Arms",
+       x = "Week",
+       y = "Observation") +
+  theme_bw() + # set names and themes
+  theme(legend.position = "bottom", plot.title = element_text(hjust = 0.5)) +
+  guides(col = guide_legend(nrow = 1))
 ```
 
-
-.
-
-Problem 2
+### Problem 2
 The Washington Post has gathered data on homicides in 50 large U.S. cities and made the data available through a GitHub repository here. You can read their accompanying article here.
 
 Describe the raw data. Create a city_state variable (e.g. “Baltimore, MD”) and then summarize within cities to obtain the total number of homicides and the number of unsolved homicides (those for which the disposition is “Closed without arrest” or “Open/No arrest”).
+
+```{r homicides data import}
+# import data and clean
+homicide_data = read_csv("./data_homicides/homicide_data.csv") %>% 
+  mutate(city_state = str_c(city,state, sep = ", ")) %>% # create new variable
+  select(uid, reported_date, city_state, everything())
+# summarize the homicide data
+homicide_sum = homicide_data %>% 
+  group_by(city_state) %>% 
+  summarize(total_homicides = n(),
+            total_unsolved = sum(disposition %in% c("Closed without arrest", "Open/No arrest")))
+```
+__Description__
 
 For the city of Baltimore, MD, use the prop.test function to estimate the proportion of homicides that are unsolved; save the output of prop.test as an R object, apply the broom::tidy to this object and pull the estimated proportion and confidence intervals from the resulting tidy dataframe.
 
