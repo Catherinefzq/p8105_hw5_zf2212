@@ -17,17 +17,14 @@ library(stringr)
 ```
 
 ### Problem 1
+
+This problem is based on the data from a longitudinal study that included a control arm and an experimental arm. Data for each participant is included in a separate file, and file names include the subject ID and arm.
+
 #### 1.1
 
-This zip file contains data from a longitudinal study that included a control arm and an experimental arm. Data for each participant is included in a separate file, and file names include the subject ID and arm.
+Create a tidy dataframe containing data from all participants, including the subject ID, arm, and observations over time.
 
-Create a tidy dataframe containing data from all participants, including the subject ID, arm, and observations over time:
-
-Start with a dataframe containing all file names; the list.files function will help
-Iterate over file names and read in data for each subject using purrr::map and saving the result as a new variable in the dataframe
-Tidy the result; manipulate file names to include control arm and subject ID, make sure weekly observations are “tidy”, and do any other tidying that’s necessary
-
-```{r study data import}
+```{r study data import, message = FALSE}
 # creat file names list with path
 file_list = tibble(
   file_name = list.files(path = "./data")) %>% 
@@ -44,8 +41,12 @@ data_tidy = data_raw %>%
                            exp = "experimental"), # make values clear
          id = str_replace(id, ".csv", "")) %>% 
   select(id, arm, everything())
+
+# skimr::skim(data_tidy)
 ```
 __Description__
+
+There are `r nrow(data_tidy)` observations and `r ncol(data_tidy)` columns in the dataset and no missing values. __Variables__ include `r names(data_tidy)`. Other than `id` and `arm`, all variables are class `numeric`. 
 
 #### 1.2
 
@@ -67,33 +68,105 @@ data_plot %>%
        x = "Week",
        y = "Observation") +
   theme_bw() + # set names and themes
-  theme(legend.position = "bottom", plot.title = element_text(hjust = 0.5)) +
+  theme(legend.position = "bottom", plot.title = element_text(hjust = 0.5, face = 'bold')) +
   guides(col = guide_legend(nrow = 1))
 ```
 
+__Comment__
+
+There is a growing trend for participants in the experimental group over 8 weeks of study. 
+
+There is no significant trend for participants in the control group.
+
+Most of the participants in the control group were observed lower values compared to experimental group.
+
 ### Problem 2
-The Washington Post has gathered data on homicides in 50 large U.S. cities and made the data available through a GitHub repository here. You can read their accompanying article here.
+This problem is based on the data of homicides in 50 large U.S. cities gathered by The Washington Post.
 
-Describe the raw data. Create a city_state variable (e.g. “Baltimore, MD”) and then summarize within cities to obtain the total number of homicides and the number of unsolved homicides (those for which the disposition is “Closed without arrest” or “Open/No arrest”).
+#### 2.1 
 
-```{r homicides data import}
-# import data and clean
-homicide_data = read_csv("./data_homicides/homicide_data.csv") %>% 
-  mutate(city_state = str_c(city,state, sep = ", ")) %>% # create new variable
-  select(uid, reported_date, city_state, everything())
+Describe the raw data. Create a city_state variable and then summarize within cities to obtain the total number of homicides and the number of unsolved homicides.
+
+```{r homicides data import, results = "hide"}
+# import data 
+homicide_raw = read_csv("./data_homicides/homicide_data.csv", col_types = "cccccccccddc")
+# look at the raw dataset
+str(homicide_raw)
+```
+__Description__
+
+The raw data includes `r nrow(homicide_raw)` observations and `r ncol(homicide_raw)` variables.
+The dataset includes the information of `r nrow(homicide_raw)` criminal homicides cases over the past decade in `r nrow(distinct(homicide_raw, city, state))` distincts cities. __Variables__ include `r names(homicide_raw)`. Other than `lat` and `lon`, all variables are class `character`. `victim_race` includes `r homicide_raw %>% select(victim_race) %>% distinct %>% count` distinct races. `disposition` includes `r homicide_raw %>% select(disposition) %>% distinct %>% count` kinds of disposition for cases.
+
+```{r new variable and sum}
+# create new variable
+homicide_data = homicide_raw %>% 
+  mutate(city_state = str_c(city,state, sep = ", ")) %>% 
+  select(uid, reported_date, city_state, everything()) 
 # summarize the homicide data
 homicide_sum = homicide_data %>% 
   group_by(city_state) %>% 
   summarize(total_homicides = n(),
             total_unsolved = sum(disposition %in% c("Closed without arrest", "Open/No arrest")))
 ```
-__Description__
 
-For the city of Baltimore, MD, use the prop.test function to estimate the proportion of homicides that are unsolved; save the output of prop.test as an R object, apply the broom::tidy to this object and pull the estimated proportion and confidence intervals from the resulting tidy dataframe.
+#### 2.2
 
-Now run prop.test for each of the cities in your dataset, and extract both the proportion of unsolved homicides and the confidence interval for each. Do this within a “tidy” pipeline, making use of purrr::map, purrr::map2, list columns and  unnest as necessary to create a tidy dataframe with estimated proportions and CIs for each city.
+Estimate the proportion of homicides that are unsolved for the city of Baltimore, MD
 
-Create a plot that shows the estimates and CIs for each city – check out geom_errorbar for a way to add error bars based on the upper and lower limits. Organize cities according to the proportion of unsolved homicides.
+```{r baltimore}
+# filter the baltimore data
+bal_data = homicide_sum %>% 
+  filter(city_state == "Baltimore, MD")
+# prop test for baltimore
+tb_bal = prop.test(bal_data$total_unsolved, bal_data$total_homicides) %>% 
+  broom::tidy() %>% 
+  select(estimate, conf.low, conf.high) # pull estimated proportion and CI
+knitr::kable(tb_bal)
+```
+
+For the city of __Baltimore, MD__, the estimated proportion is `r tb_bal$estimate`, the confidence intervals is (`r tb_bal$conf.low`, `r tb_bal$conf.high`).
+
+#### 2.3
+
+Extract both the proportion of unsolved homicides and the confidence interval for all cities. 
+
+```{r prop function}
+city_prop_test = function(x, n) {
+  prop.test(x, n) %>% 
+    broom::tidy() %>% 
+    select(estimate, conf.low, conf.high) %>% 
+    round(3)
+    
+}
+```
+```{r prop test for all cities}
+city_prop = homicide_sum %>% 
+  # map the data by the function
+  mutate(prop = map2(.x = total_unsolved, .y = total_homicides, ~city_prop_test(.x, .y))) %>% 
+  unnest() %>% 
+  select(city_state, estimate, conf.low, conf.high)
+knitr::kable(city_prop)
+
+```
+
+#### 2.4
+Create a plot that shows the estimates and CIs for each city. Organize cities according to the proportion of unsolved homicides.
+
+```{r city plot, fig.width = 9}
+city_prop %>% 
+  # organize the city according to proportion
+  mutate(city_state = forcats::fct_reorder(city_state, estimate, .desc = T)) %>% 
+  ggplot(aes(x = city_state, y = estimate)) +
+  geom_point(color = "red") + # plot the estimate
+  geom_errorbar(aes(x = city_state, ymin = conf.low, ymax = conf.high)) + # plot the intervals
+  theme(axis.text.x = element_text(angle = 90), plot.title = element_text(hjust = 0.5, face = 'bold')) +
+  labs(title = "Estimates and CIs of the Unsolved Homicides Proportion in 50 American Cities",
+       x = "City",
+       y = "Proportion",
+       caption = "Data from The Washington Post") 
+```
+
 
 
 
