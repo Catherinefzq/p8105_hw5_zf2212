@@ -87,7 +87,7 @@ There is no significant trend for participants in the control group.
 Most of the participants in the control group were observed lower values compared to experimental group.
 
 ### Problem 2
-This problem is based on the data of homicides in 50 large U.S. cities gathered by The Washington Post.
+This problem is based on the data gathered by The Washington Post about homicides in 50 large U.S. cities over the past decade.
 
 #### 2.1 
 
@@ -173,7 +173,6 @@ city_prop %>%
        caption = "Data from The Washington Post") 
 ```
 
-
-
+The plot shows the estimates and CIs for 51 American cities. Most of the cities hava an unsolved homicide proportion over 25%. It reflects the problem that there are many areas across the country where murder is common but arrests are rare.
 
 
